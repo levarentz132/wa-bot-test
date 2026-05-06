@@ -30,6 +30,7 @@ services:
       - N8N_PORT=5678
       - WEBHOOK_URL=http://localhost:5678/
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
+      - N8N_SECURE_COOKIE=false
     restart: unless-stopped
     user: "1000:1000"
     networks:
