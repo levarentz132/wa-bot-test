@@ -1,0 +1,31 @@
+# WhatsApp Auth Files (sensitive)
+baileys/auth/
+
+# n8n Database and logs
+n8n/database.sqlite
+n8n/database.sqlite-shm
+n8n/database.sqlite-wal
+n8n/crash.journal
+
+# Environment variables
+.env
+.env.local
+
+# Node modules
+node_modules/
+baileys/node_modules/
+n8n/nodes/node_modules/
+
+# Media files (optional - uncomment if you don't want to track media)
+# baileys/media/
+
+# Docker volumes
+redis_data/
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS files
+.DS_Store
+Thumbs.db
