@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --requirepass redis123
+    restart: unless-stopped
+    networks:
+      - wa-bot-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "redis123", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    ports:
+      - "5678:5678"
+    volumes:
+      - ./n8n:/home/node/.n8n
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - WEBHOOK_URL=http://localhost:5678/
+    restart: unless-stopped
+    networks:
+      - wa-bot-network
+
+  baileys:
+    build: ./baileys
+    container_name: baileys
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./baileys:/app
+      - /app/node_modules
+      - ./baileys/auth:/app/auth
+      - ./baileys/media:/app/media
+    environment:
+      - NODE_ENV=development
+      - N8N_WEBHOOK_URL=http://n8n:5678/webhook/whatsapp-in
+      - REDIS_URL=redis://:redis123@redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+      n8n:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - wa-bot-network
+
+networks:
+  wa-bot-network:
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local
