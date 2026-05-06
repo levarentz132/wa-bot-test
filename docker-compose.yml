@@ -29,7 +29,9 @@ services:
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
       - WEBHOOK_URL=http://localhost:5678/
+      - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
     restart: unless-stopped
+    user: "1000:1000"
     networks:
       - wa-bot-network
 
