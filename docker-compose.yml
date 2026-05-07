@@ -28,8 +28,8 @@ services:
     environment:
       - N8N_HOST=0.0.0.0
       - N8N_PORT=5678
-      - N8N_EDITOR_BASE_URL=http://http://16.78.223.174/:5678
-      - WEBHOOK_URL=http://http://16.78.223.174/:5678/
+      - N8N_EDITOR_BASE_URL=http://15.232.25.149/:5678
+      - WEBHOOK_URL=http://15.232.25.149/:5678/
       - N8N_ENFORCE_SETTINGS_FILE_PERMISSIONS=false
       - N8N_SECURE_COOKIE=false
       - N8N_RUNNERS_ENABLED=false
