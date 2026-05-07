@@ -347,67 +347,63 @@ async function connectToWhatsApp(phoneNumber = null) {
   
   console.log('🔧 Event listeners registered (messages.upsert, creds.update, connection.update)');
   
-  // Log ALL socket events for debugging
-  const originalOn = sock.ev.on.bind(sock.ev);
+  // Track socket events (reduced logging for cleaner output)
   const eventCounts = {};
   
-  // Intercept all events
+  // Intercept events and count them silently
   ['messages.upsert', 'messages.update', 'message-receipt.update', 'presence.update', 
    'chats.upsert', 'chats.update', 'contacts.upsert', 'contacts.update'].forEach(eventName => {
     sock.ev.on(eventName, (data) => {
       eventCounts[eventName] = (eventCounts[eventName] || 0) + 1;
-      if (eventName === 'messages.upsert' || eventName === 'messages.update') {
-        console.log(`📡 EVENT: ${eventName} (count: ${eventCounts[eventName]})`);
+      // Only log new messages, not updates
+      if (eventName === 'messages.upsert') {
+        console.log(`📡 New messages received (count: ${eventCounts[eventName]})`);
       }
     });
   });
   
-  // Log event stats every 30 seconds
+  // Log event stats every 5 minutes (reduced from 30 seconds)
   setInterval(() => {
     if (Object.keys(eventCounts).length > 0) {
-      console.log('📊 Event stats (last 30s):', eventCounts);
+      // Only log if there's meaningful activity
+      const hasNewMessages = eventCounts['messages.upsert'] > 0;
+      if (hasNewMessages) {
+        console.log('📊 Event summary:', {
+          newMessages: eventCounts['messages.upsert'] || 0,
+          updates: eventCounts['messages.update'] || 0,
+          chats: eventCounts['chats.update'] || 0
+        });
+      }
+      // Reset counts after logging
+      Object.keys(eventCounts).forEach(key => eventCounts[key] = 0);
     }
-  }, 30000);
+  }, 300000); // 5 minutes
 
   sock.ev.on('messages.upsert', async ({ messages, type }) => {
-    console.log('🔔 messages.upsert EVENT TRIGGERED! Type:', type, 'Count:', messages.length);
-    console.log('🔗 Socket connection state:', connectionState.connected ? 'CONNECTED' : 'DISCONNECTED');
     
     for (const msg of messages) {
       try {
-        console.log('📨 RAW MESSAGE RECEIVED:', JSON.stringify(msg.key, null, 2));
-        
         if (!msg?.message) {
-          console.log('⚠️ Message has no content, skipping');
           continue;
         }
 
         const rawUser = msg.key.remoteJid;
         const user = normalizeUser(rawUser);
-        
-        console.log('👤 Remote JID:', rawUser);
-        console.log('👤 Normalized User:', user);
 
         // Ignore status broadcasts and group chats
         if (!user || user === 'status@broadcast' || user.includes('@g.us')) {
-          console.log('⏭️ Skipping (status/group):', user);
           continue;
         }
 
         const messageText = extractText(msg);
-        console.log('📝 Extracted Text:', messageText);
         
         if (!messageText) {
-          console.log('⚠️ No text extracted, skipping');
           continue;
         }
 
         // Handle admin outgoing messages (fromMe)
         if (msg.key.fromMe) {
           const cmd = messageText.toLowerCase();
-          
-          console.log('📤 ADMIN OUTGOING TO:', user);
-          console.log('💬 ADMIN TEXT:', messageText);
 
           // Check for handover commands
           if (HANDOVER_COMMANDS.includes(cmd)) {
@@ -416,14 +412,14 @@ async function connectToWhatsApp(phoneNumber = null) {
               clearTimeout(messageBuffer[user].timer);
             }
             delete messageBuffer[user];
-            console.log('🔥 HANDOVER AKTIF:', user);
+            console.log('🔥 Handover active for:', user);
             continue;
           }
 
           // Check for resume commands
           if (RESUME_COMMANDS.includes(cmd)) {
             delete handoverUsers[user];
-            console.log('✅ BOT RESUMED FOR:', user);
+            console.log('✅ Bot resumed for:', user);
             continue;
           }
 
@@ -434,12 +430,11 @@ async function connectToWhatsApp(phoneNumber = null) {
         const from = msg.key.remoteJid;
         const messageId = msg.key.id;
 
-        console.log('📩 FROM:', user);
-        console.log('💬 MESSAGE:', messageText);
+        console.log('📩 Message from:', user.substring(0, 15) + '... →', messageText.substring(0, 50));
 
         // Check if handover is active for this user
         if (handoverUsers[user]) {
-          console.log('⛔ Handover active, skip bot for:', user);
+          console.log('⛔ Handover active, bot skipped');
           continue;
         }
 
@@ -489,7 +484,6 @@ async function handleIncomingMessage(user, message, messageId, originalJid) {
         delete messageBuffer[user];
 
         const combinedMessage = payload.join(' ');
-        console.log('🧠 COMBINED MESSAGE:', combinedMessage);
 
         const payloadData = {
           from: user,
@@ -497,8 +491,7 @@ async function handleIncomingMessage(user, message, messageId, originalJid) {
           message_id: messageId
         };
 
-        console.log('📤 Sending to n8n:', N8N_WEBHOOK_URL);
-        logger.info({ payload: payloadData }, 'Forwarding message to n8n');
+        console.log('📤 → n8n:', combinedMessage.substring(0, 60) + (combinedMessage.length > 60 ? '...' : ''));
 
         // Send to n8n webhook
         const response = await axios.post(N8N_WEBHOOK_URL, payloadData, {
@@ -507,7 +500,6 @@ async function handleIncomingMessage(user, message, messageId, originalJid) {
         });
 
         const data = response.data;
-        console.log('📦 N8N RESPONSE:', JSON.stringify(data));
 
         if (!data || typeof data !== 'object') {
           console.error('⚠️ Invalid n8n response format:', data);
@@ -520,7 +512,6 @@ async function handleIncomingMessage(user, message, messageId, originalJid) {
         }
 
         // Use the original JID format for reply (supports both LID and traditional format)
-        console.log('📨 Sending reply to JID:', replyJid);
         
         try {
           let sent;
@@ -533,36 +524,32 @@ async function handleIncomingMessage(user, message, messageId, originalJid) {
           
           // Check if response includes an image
           if (imageUrl && (data.image || isImageAction)) {
-            console.log('📸 Sending image response');
-            console.log('🖼️ Image URL:', imageUrl);
-            console.log('📝 Caption:', data.caption || data.message || '');
+            console.log('📸 Sending image:', imageUrl.substring(0, 50) + '...');
             
             sent = await sock.sendMessage(replyJid, {
               image: { url: imageUrl },
               caption: data.caption || data.message || ''
             });
-            console.log('✅ IMAGE SENT! ID:', sent?.key?.id);
+            console.log('✅ Image sent');
           }
           // Check if response includes a video
           else if (videoUrl || isVideoAction) {
             const finalVideoUrl = videoUrl || data.media_url;
-            console.log('🎥 Sending video response');
-            console.log('📹 Video URL:', finalVideoUrl);
-            console.log('📝 Caption:', data.caption || data.message || '');
+            console.log('🎥 Sending video:', finalVideoUrl.substring(0, 50) + '...');
             
             sent = await sock.sendMessage(replyJid, {
               video: { url: finalVideoUrl },
               caption: data.caption || data.message || ''
             });
-            console.log('✅ VIDEO SENT! ID:', sent?.key?.id);
+            console.log('✅ Video sent');
           }
           // Default: send text message
           else {
             const reply = data.message || data.caption || "Maaf kak, terjadi error 😊";
-            console.log('💬 Sending text reply:', reply);
+            console.log('💬 Sending:', reply.substring(0, 50) + (reply.length > 50 ? '...' : ''));
             
             sent = await sock.sendMessage(replyJid, { text: reply });
-            console.log('✅ TEXT SENT! ID:', sent?.key?.id);
+            console.log('✅ Text sent');
           }
           
           console.log('🤖 AI REPLY DELIVERED');
